@@ -130,19 +130,45 @@ const Homepage = () => {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <h2 className="modal-title">Our Customers</h2>
-            <div className="modal-body">
+            <div className="modal-body customers-grid" aria-label="Customer segments">
+              {/* Universities */}
               <div className="customer-item">
-                <span className="customer-icon">🏛️</span>
+                <div className="customer-icon-wrap" aria-hidden="true">
+                  <svg className="customer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 10.5l9-6 9 6" />
+                    <path d="M4.5 10.5h15" />
+                    <path d="M7 10.5v7.5" />
+                    <path d="M12 10.5v7.5" />
+                    <path d="M17 10.5v7.5" />
+                    <path d="M5.5 18h13" />
+                    <path d="M4 20.5h16" />
+                  </svg>
+                </div>
                 <h3>Universities</h3>
                 <p>Protecting students and faculty across multiple campuses with state-of-the-art surveillance.</p>
               </div>
+
+              {/* Colleges */}
               <div className="customer-item">
-                <span className="customer-icon">🎓</span>
+                <div className="customer-icon-wrap" aria-hidden="true">
+                  <svg className="customer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 8l9-4 9 4-9 4-9-4z" />
+                    <path d="M7 10v4c0 2 2.5 3.5 5 3.5s5-1.5 5-3.5v-4" />
+                    <path d="M20 10v6" />
+                  </svg>
+                </div>
                 <h3>Colleges</h3>
                 <p>Ensuring safety in educational environments with intelligent monitoring systems.</p>
               </div>
+
+              {/* Research Institutes */}
               <div className="customer-item">
-                <span className="customer-icon">🔬</span>
+                <div className="customer-icon-wrap" aria-hidden="true">
+                  <svg className="customer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 3v5l-4.2 7.4A3 3 0 0 0 8.4 20h7.2a3 3 0 0 0 2.6-4.6L14 8V3" />
+                    <path d="M8 15c.9.8 2 .8 3 0s2-.8 3 0 2 .8 3 0" />
+                  </svg>
+                </div>
                 <h3>Research Institutes</h3>
                 <p>Securing valuable research facilities with advanced tracking capabilities.</p>
               </div>

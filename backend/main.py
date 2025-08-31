@@ -208,7 +208,148 @@ try:
     ultralytics_version = pkg_resources.get_distribution("ultralytics").version
     logger.info(f"Detected Ultralytics version: {ultralytics_version}")
     
+    # Import torch for safe globals configuration
+    import torch
+    
+    # Check PyTorch version and configure safe globals if needed
+    torch_version = torch.__version__.split('+')[0]  # Remove suffix like '+cpu'
+    torch_major, torch_minor = map(int, torch_version.split('.')[:2])
+    
+    if torch_major > 2 or (torch_major == 2 and torch_minor >= 6):
+        logger.info(f"Detected PyTorch {torch.__version__} - configuring safe globals for YOLO models")
+        
+        # Import ultralytics first to get the actual classes
+        try:
+            from ultralytics.nn.tasks import DetectionModel, SegmentationModel, ClassificationModel, PoseModel
+            from ultralytics.nn.modules.head import Detect, Segment, Pose, Classify
+            from ultralytics.nn.modules.conv import Conv
+            from ultralytics.nn.modules.block import C2f, Bottleneck, SPPF
+            from torch.nn.modules.upsampling import Upsample
+            from torch.nn.modules.pooling import AdaptiveAvgPool2d
+            from torch.nn.modules.linear import Linear
+            from torch.nn.modules.container import Sequential, ModuleList
+            from torch.nn.modules.batchnorm import BatchNorm2d
+            from torch.nn.modules.activation import SiLU, ReLU, GELU
+            from torch.nn.modules.conv import Conv2d
+            from torch.nn.modules.dropout import Dropout
+            from torch.nn.modules.pooling import MaxPool2d
+            from torch.nn.modules.adaptive import AdaptiveMaxPool2d
+            
+            # Add safe globals for ultralytics and torch classes
+            safe_globals = [
+                # Ultralytics classes
+                DetectionModel,
+                SegmentationModel, 
+                ClassificationModel,
+                PoseModel,
+                Detect,
+                Segment,
+                Pose,
+                Classify,
+                Conv,
+                C2f,
+                Bottleneck,
+                SPPF,
+                # Torch NN modules commonly used in YOLO
+                Sequential,
+                ModuleList,
+                Conv2d,
+                BatchNorm2d,
+                SiLU,
+                ReLU,
+                GELU,
+                Upsample,
+                AdaptiveAvgPool2d,
+                AdaptiveMaxPool2d,
+                MaxPool2d,
+                Linear,
+                Dropout,
+            ]
+            
+            # Try to import additional classes that might be needed
+            try:
+                from ultralytics.nn.tasks import RTDETRDetectionModel
+                from ultralytics.nn.modules.head import RTDETRDecoder
+                safe_globals.extend([RTDETRDetectionModel, RTDETRDecoder])
+            except ImportError:
+                pass  # These classes might not exist in this version
+            
+            try:
+                # Additional torch modules that might be in YOLO models
+                from torch.nn import Identity, Flatten
+                safe_globals.extend([Identity, Flatten])
+            except ImportError:
+                pass
+            
+            torch.serialization.add_safe_globals(safe_globals)
+            logger.info(f"Added {len(safe_globals)} safe globals for YOLO model loading")
+            
+        except ImportError as e:
+            logger.warning(f"Could not import some classes for safe globals: {e}")
+            logger.info("Will attempt to load models with fallback method")
+    
     from ultralytics import YOLO
+    import warnings
+    
+    # Custom YOLO loader with fallback
+    def load_yolo_with_fallback(model_path):
+        """Load YOLO model with fallback to weights_only=False if needed."""
+        try:
+            # First try normal loading
+            return YOLO(model_path)
+        except Exception as e:
+            if "Weights only load failed" in str(e) or "weights_only" in str(e).lower():
+                logger.warning(f"Standard loading failed, attempting fallback for trusted model: {model_path}")
+                logger.warning("Using weights_only=False - this is safe for trusted model files from trusted sources")
+                
+                # Use torch.serialization.safe_globals context manager to allow all globals temporarily
+                import torch
+                import torch.nn as nn
+                
+                # Get all torch.nn classes that might be in the model
+                torch_nn_classes = []
+                for name in dir(nn):
+                    obj = getattr(nn, name)
+                    if isinstance(obj, type) and issubclass(obj, nn.Module):
+                        torch_nn_classes.append(obj)
+                
+                # Also add some common classes that might be missing
+                additional_classes = [
+                    dict, list, tuple, int, float, str, bool, type(None),
+                    torch.Tensor, torch.Size,
+                ]
+                
+                try:
+                    # Import ultralytics classes
+                    from ultralytics.nn.tasks import DetectionModel
+                    additional_classes.append(DetectionModel)
+                except ImportError:
+                    pass
+                
+                try:
+                    all_safe_classes = torch_nn_classes + additional_classes
+                    with torch.serialization.safe_globals(all_safe_classes):
+                        return YOLO(model_path)
+                except Exception as context_error:
+                    logger.warning(f"Context manager approach failed: {context_error}")
+                    logger.warning("Falling back to unsafe loading for trusted model files")
+                    
+                    # Final fallback: monkey patch torch.load temporarily
+                    original_torch_load = torch.load
+                    try:
+                        def patched_torch_load(*args, **kwargs):
+                            # Force weights_only=False for trusted model loading
+                            kwargs['weights_only'] = False
+                            return original_torch_load(*args, **kwargs)
+                        
+                        torch.load = patched_torch_load
+                        return YOLO(model_path)
+                    finally:
+                        # Always restore original torch.load
+                        torch.load = original_torch_load
+            else:
+                # Re-raise the original exception if it's not a weights_only issue
+                raise e
     
     # Locate the models
     primary_model_path = find_model("yolov8n-oiv7.pt")
@@ -216,12 +357,12 @@ try:
     
     # Try to load the primary model
     logger.info(f"Loading primary model from {primary_model_path}...")
-    primary_model = YOLO(primary_model_path)
+    primary_model = load_yolo_with_fallback(primary_model_path)
     
     # Try to load the bag detection model
     try:
         logger.info(f"Loading bag detection model from {bag_model_path}...")
-        bag_model = YOLO(bag_model_path)
+        bag_model = load_yolo_with_fallback(bag_model_path)
         use_dual_model = True
         logger.info("Successfully loaded both models!")
     except Exception as e:

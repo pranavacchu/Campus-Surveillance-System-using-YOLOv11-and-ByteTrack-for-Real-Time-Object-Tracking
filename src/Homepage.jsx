@@ -157,7 +157,7 @@ const Homepage = () => {
                     <path d="M20 10v6" />
                   </svg>
                 </div>
-                <h3>Colleges</h3>
+                <h3>Schools</h3>
                 <p>Ensuring safety in educational environments with intelligent monitoring systems.</p>
               </div>
 
@@ -171,6 +171,22 @@ const Homepage = () => {
                 </div>
                 <h3>Research Institutes</h3>
                 <p>Securing valuable research facilities with advanced tracking capabilities.</p>
+              </div>
+
+              {/* Public Gatherings */}
+              <div className="customer-item">
+                <div className="customer-icon-wrap" aria-hidden="true">
+                  <svg className="customer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="8" r="3" />
+                    <path d="M6 19c0-3 4-5 6-5s6 2 6 5" />
+                    <circle cx="6.5" cy="10" r="2" />
+                    <circle cx="17.5" cy="10" r="2" />
+                    <path d="M2.5 19c0-2 2.5-3.5 4.5-4" />
+                    <path d="M21.5 19c0-2-2.5-3.5-4.5-4" />
+                  </svg>
+                </div>
+                <h3>Public Gatherings</h3>
+                <p>Enhancing safety and crowd management at stadiums, concerts, and public events with real-time monitoring.</p>
               </div>
             </div>
             <button className="modal-close" aria-label="Close modal" onClick={closeModal}>

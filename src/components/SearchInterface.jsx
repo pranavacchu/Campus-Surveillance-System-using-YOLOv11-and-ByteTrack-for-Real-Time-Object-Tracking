@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import videoSearchService from '../services/videoSearchService';
+import VideoResultPlayer from './VideoResultPlayer';
 import './SearchInterface.css';
 
 const SearchInterface = ({ isConnected }) => {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [enrichedResults, setEnrichedResults] = useState([]); // NEW
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
   
@@ -67,6 +69,29 @@ const SearchInterface = ({ isConnected }) => {
       });
       
       setSearchResults(response.results || []);
+      
+      // Enrich results with Firebase URLs from Firestore
+      console.log('📥 Enriching results with Firebase URLs...');
+      const enriched = await Promise.all(
+        (response.results || []).map(async (result) => {
+          // Try to get Firebase URL from Firestore if video_id exists
+          if (result.video_id) {
+            try {
+              const metadata = await videoSearchService.getVideoMetadata(result.video_id);
+              return { 
+                ...result, 
+                firebase_url: metadata.firebaseUrl || metadata.firebase_url 
+              };
+            } catch (err) {
+              console.warn('Failed to fetch metadata for', result.video_id, err);
+            }
+          }
+          // Keep result as-is if no video_id or fetch failed
+          return result;
+        })
+      );
+      
+      setEnrichedResults(enriched);
       console.log(`✅ Found ${response.count} results`);
       
     } catch (err) {
@@ -80,6 +105,7 @@ const SearchInterface = ({ isConnected }) => {
   const handleReset = () => {
     setQuery('');
     setSearchResults([]);
+    setEnrichedResults([]);
     setError(null);
     setDateFilter('');
     setNamespaceFilter('');
@@ -283,8 +309,26 @@ const SearchInterface = ({ isConnected }) => {
         </div>
       )}
 
-      {/* Search Results */}
-      {searchResults.length > 0 && (
+      {/* Search Results with Video Players */}
+      {enrichedResults.length > 0 && (
+        <div className="search-results">
+          <h3>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" style={{display: 'inline', marginRight: '8px'}}>
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Found {enrichedResults.length} result{enrichedResults.length !== 1 ? 's' : ''}
+          </h3>
+
+          <div className="results-list">
+            {enrichedResults.map((result, index) => (
+              <VideoResultPlayer key={index} result={result} index={index} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback: Old-style results if no Firebase URLs available */}
+      {searchResults.length > 0 && enrichedResults.length === 0 && (
         <div className="search-results">
           <h3>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" style={{display: 'inline', marginRight: '8px'}}>
@@ -359,7 +403,7 @@ const SearchInterface = ({ isConnected }) => {
       )}
 
       {/* No Results */}
-      {!isSearching && searchResults.length === 0 && query && (
+      {!isSearching && searchResults.length === 0 && enrichedResults.length === 0 && query && (
         <div className="no-results">
           <p>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{display: 'inline', marginRight: '6px'}}>

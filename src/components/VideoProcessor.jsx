@@ -10,6 +10,7 @@ const VideoProcessor = ({ isConnected }) => {
   const [processingStatus, setProcessingStatus] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [cloudUploadStatus, setCloudUploadStatus] = useState(null); // NEW
 
   // Video processing options
   const [videoName, setVideoName] = useState('');
@@ -54,22 +55,29 @@ const VideoProcessor = ({ isConnected }) => {
     try {
       setError(null);
       setUploadProgress(0);
+      setCloudUploadStatus(null);
       
-      console.log('📤 Uploading video:', file.name);
+      console.log('📤 Starting cloud upload pipeline...');
       
-      const uploadResult = await videoSearchService.uploadVideo(
+      // Use new cloud upload method with Firebase + Colab
+      const uploadResult = await videoSearchService.uploadVideoWithCloud(
         file,
-        (progress) => setUploadProgress(progress)
+        (progressData) => {
+          setCloudUploadStatus(progressData.stage);
+          setUploadProgress(progressData.progress);
+        }
       );
       
       setUploadedFile(uploadResult);
       setUploadProgress(100);
+      setCloudUploadStatus('complete');
       console.log('✅ Upload complete:', uploadResult);
       
     } catch (err) {
       setError(`Upload failed: ${err.message}`);
       console.error('Upload error:', err);
       setUploadProgress(0);
+      setCloudUploadStatus(null);
     }
   };
 
@@ -86,13 +94,15 @@ const VideoProcessor = ({ isConnected }) => {
 
       console.log('🎬 Starting video processing...');
 
-      // Start processing
-      const { job_id } = await videoSearchService.processVideo(
-        uploadedFile.filename,
+      // Use new processing method with metadata
+      const { job_id } = await videoSearchService.processVideoWithMetadata(
+        uploadedFile.videoId,
+        uploadedFile.colabFilename,
         {
-          videoName: videoName || uploadedFile.original_filename,
+          videoName: videoName || uploadedFile.originalFilename,
           videoDate,
-          useObjectDetection
+          useObjectDetection,
+          firebaseUrl: uploadedFile.firebaseUrl
         }
       );
 
@@ -125,6 +135,7 @@ const VideoProcessor = ({ isConnected }) => {
     setFile(null);
     setUploadedFile(null);
     setUploadProgress(0);
+    setCloudUploadStatus(null);
     setProcessing(false);
     setProcessingStatus(null);
     setResult(null);
@@ -187,7 +198,7 @@ const VideoProcessor = ({ isConnected }) => {
       {/* Step 2: Upload */}
       {file && !uploadedFile && (
         <div className="processing-step">
-          <h3>Step 2: Upload to Colab</h3>
+          <h3>Step 2: Upload to Cloud & Colab</h3>
           <button
             onClick={handleUpload}
             disabled={processing || uploadProgress > 0}
@@ -202,6 +213,14 @@ const VideoProcessor = ({ isConnected }) => {
           </button>
           {uploadProgress > 0 && uploadProgress < 100 && (
             <div className="progress-container">
+              <div className="progress-info">
+                <span>
+                  {cloudUploadStatus === 'firebase' && '☁️ Uploading to Firebase Storage...'}
+                  {cloudUploadStatus === 'colab' && '🚀 Uploading to Colab...'}
+                  {!cloudUploadStatus && 'Uploading...'}
+                </span>
+                <span>{Math.round(uploadProgress)}%</span>
+              </div>
               <div className="progress-bar" style={{ width: `${uploadProgress}%` }}>
                 {uploadProgress.toFixed(0)}%
               </div>

@@ -17,7 +17,7 @@ class CloudinaryService {
    * Upload video to Cloudinary
    * Returns: { url, publicId, secureUrl, thumbnailUrl, duration, format, bytes }
    */
-  async uploadVideo(file, onProgress) {
+  async uploadVideo(file, onProgress, options = {}) {
     if (!this.cloudName || !this.uploadPreset) {
       throw new Error('Cloudinary not configured. Check .env file.');
     }
@@ -27,6 +27,11 @@ class CloudinaryService {
     formData.append('upload_preset', this.uploadPreset); // unsigned upload (no signature needed)
     formData.append('folder', 'capstone-videos'); // organize in folder
     formData.append('resource_type', 'video');
+    
+    // Use custom public_id if provided (user-assigned name)
+    if (options.publicId) {
+      formData.append('public_id', options.publicId);
+    }
     
     // Optional: Add tags for organization
     formData.append('tags', 'surveillance,capstone');

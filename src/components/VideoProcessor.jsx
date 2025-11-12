@@ -60,12 +60,14 @@ const VideoProcessor = ({ isConnected }) => {
       console.log('📤 Starting cloud upload pipeline...');
       
       // Use new cloud upload method with Firebase + Colab (with fallback)
+      // Pass videoName to use as Cloudinary public_id (will be sanitized)
       const uploadResult = await videoSearchService.uploadVideoWithCloud(
         file,
         (progressData) => {
           setCloudUploadStatus(progressData.stage);
           setUploadProgress(progressData.progress);
-        }
+        },
+        videoName || file.name.split('.')[0] // Use video name or filename without extension
       );
       
       setUploadedFile(uploadResult);

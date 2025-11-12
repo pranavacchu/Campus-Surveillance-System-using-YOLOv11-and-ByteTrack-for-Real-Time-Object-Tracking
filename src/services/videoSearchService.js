@@ -191,7 +191,7 @@ class VideoSearchService {
    * Upload video to Cloudinary + Colab (Enhanced with cloud storage)
    * Returns: { videoId, cloudinaryUrl, cloudinaryPublicId, colabFilename, originalFilename, thumbnailUrl }
    */
-  async uploadVideoWithCloud(file, onProgress) {
+  async uploadVideoWithCloud(file, onProgress, videoName = null) {
     const videoId = `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     let cloudinaryUrl = null;
     let cloudinaryPublicId = null;
@@ -203,9 +203,19 @@ class VideoSearchService {
     // Step 1: Upload to Cloudinary (0-50%)
     try {
       console.log('☁️ Uploading to Cloudinary...');
+      
+      // Use user-provided video name as Cloudinary public_id
+      const uploadOptions = {};
+      if (videoName) {
+        // Sanitize video name for Cloudinary (alphanumeric, hyphens, underscores only)
+        const sanitizedName = videoName.replace(/[^a-zA-Z0-9_-]/g, '_');
+        uploadOptions.publicId = sanitizedName;
+        console.log(`Using custom public_id: ${sanitizedName}`);
+      }
+      
       const cloudResult = await cloudinaryService.uploadVideo(file, (progress) => {
         onProgress?.({ stage: 'cloudinary', progress: progress * 0.5 });
-      });
+      }, uploadOptions);
       
       cloudinaryUrl = cloudResult.secureUrl;
       cloudinaryPublicId = cloudResult.publicId;

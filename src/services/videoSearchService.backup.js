@@ -188,41 +188,61 @@ class VideoSearchService {
   }
 
   /**
-   * Upload video to Cloudinary + Colab (Enhanced with cloud storage)
-   * Returns: { videoId, cloudinaryUrl, cloudinaryPublicId, colabFilename, originalFilename, thumbnailUrl }
+   * Upload video to Firebase Storage + Colab (Enhanced with cloud storage)
+   * Returns: { videoId, firebaseUrl, colabFilename, originalFilename }
    */
   async uploadVideoWithCloud(file, onProgress) {
     const videoId = `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    let cloudinaryUrl = null;
-    let cloudinaryPublicId = null;
-    let thumbnailUrl = null;
+    let firebaseUrl = null;
     let colabResult = null;
     
-    console.log('📤 Starting dual upload pipeline (Cloudinary + Colab)...');
+    console.log('📤 Starting dual upload pipeline (Firebase + Colab)...');
 
-    // Step 1: Upload to Cloudinary (0-50%)
+    // Step 1: Try Firebase Storage upload (0-50%) with 10-second timeout
     try {
-      console.log('☁️ Uploading to Cloudinary...');
-      const cloudResult = await cloudinaryService.uploadVideo(file, (progress) => {
-        onProgress?.({ stage: 'cloudinary', progress: progress * 0.5 });
-      });
-      
-      cloudinaryUrl = cloudResult.secureUrl;
-      cloudinaryPublicId = cloudResult.publicId;
-      thumbnailUrl = cloudResult.thumbnailUrl;
-      console.log('✅ Cloudinary upload successful!');
-    } catch (cloudinaryError) {
-      console.error('❌ Cloudinary upload failed:', cloudinaryError.message);
+      console.log('☁️ Uploading to Firebase Storage...');
+      const storageRef = ref(storage, `videos/${videoId}/${file.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      // Track Firebase upload progress (0-50%) with timeout
+      firebaseUrl = await Promise.race([
+        new Promise((resolve, reject) => {
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 50;
+              onProgress?.({ stage: 'firebase', progress });
+            },
+            (error) => {
+              // Firebase upload failed
+              console.warn('⚠️ Firebase upload error:', error.message);
+              reject(error);
+            },
+            async () => {
+              const url = await getDownloadURL(uploadTask.snapshot.ref);
+              console.log('✅ Firebase upload successful!');
+              resolve(url);
+            }
+          );
+        }),
+        new Promise((_, reject) => {
+          setTimeout(() => {
+            uploadTask.cancel(); // Cancel the upload
+            reject(new Error('Firebase upload timeout (10s) - Storage may not be enabled'));
+          }, 10000); // 10 second timeout
+        })
+      ]);
+    } catch (firebaseError) {
+      console.error('❌ Firebase upload failed:', firebaseError.message);
       console.log('⚡ Will continue with Colab-only mode...');
-      cloudinaryUrl = null;
+      firebaseUrl = null; // Explicitly set to null
     }
 
-    // Step 2: ALWAYS upload to Colab for processing (50-100% or 0-100% if Cloudinary failed)
+    // Step 2: ALWAYS upload to Colab for processing (50-100% or 0-100% if Firebase failed)
     try {
-      console.log('🚀 Uploading to Colab for processing...');
+      console.log('� Uploading to Colab for processing...');
       colabResult = await this.uploadVideo(file, (progress) => {
-        // Adjust progress based on whether Cloudinary succeeded
-        const adjustedProgress = cloudinaryUrl ? 50 + (progress * 0.5) : progress;
+        // Adjust progress based on whether Firebase succeeded
+        const adjustedProgress = firebaseUrl ? 50 + (progress * 0.5) : progress;
         onProgress?.({ stage: 'colab', progress: adjustedProgress });
       });
       console.log('✅ Colab upload successful!');
@@ -231,17 +251,39 @@ class VideoSearchService {
       throw new Error(`Colab upload failed: ${colabError.message}`);
     }
 
+    // Step 3: Store metadata in Firestore (only if Firebase upload succeeded)
+    if (firebaseUrl) {
+      try {
+        console.log('💾 Storing metadata in Firestore...');
+        await setDoc(doc(db, 'videos', videoId), {
+          videoId,
+          originalFilename: file.name,
+          firebaseUrl,
+          colabFilename: colabResult.filename,
+          uploadedAt: new Date().toISOString(),
+          size: file.size,
+          type: file.type,
+          processed: false
+        });
+        console.log('✅ Metadata saved to Firestore');
+      } catch (firestoreError) {
+        console.warn('⚠️ Firestore save failed (non-critical):', firestoreError.message);
+        // Continue anyway - metadata not critical for immediate use
+      }
+    } else {
+      console.log('ℹ️ Skipping Firestore save (Firebase upload failed)');
+    }
+
     console.log('✅ Complete upload pipeline finished');
 
     return {
-      videoId,
-      cloudinaryUrl,
-      cloudinaryPublicId,
-      thumbnailUrl,
+      videoId: firebaseUrl ? videoId : null,
+      firebaseUrl,
       colabFilename: colabResult.filename,
       originalFilename: file.name
     };
   }
+
   /**
    * Start video processing
    */
@@ -263,7 +305,7 @@ class VideoSearchService {
           video_name: options.videoName,
           video_date: options.videoDate,
           video_id: options.videoId,
-          cloudinary_url: options.cloudinaryUrl,
+          firebase_url: options.firebaseUrl,
           save_frames: options.saveFrames || false,
           upload_to_pinecone: options.uploadToPinecone !== false,
           use_object_detection: options.useObjectDetection || false
@@ -277,6 +319,51 @@ class VideoSearchService {
     }
 
     return await response.json();
+  }
+
+  /**
+   * Process video and update Firestore metadata (NEW)
+   */
+  async processVideoWithMetadata(videoId, colabFilename, options) {
+    // Start Colab processing with Firebase metadata
+    const processResult = await this.processVideo(colabFilename, {
+      ...options,
+      videoId,
+      firebaseUrl: options.firebaseUrl
+    });
+
+    // Update Firestore after processing starts
+    if (videoId) {
+      try {
+        await updateDoc(doc(db, 'videos', videoId), {
+          processing: true,
+          jobId: processResult.job_id,
+          processingStartedAt: new Date().toISOString()
+        });
+      } catch (error) {
+        console.warn('Failed to update Firestore metadata:', error);
+      }
+    }
+
+    return processResult;
+  }
+
+  /**
+   * Get video metadata from Firestore (NEW)
+   */
+  async getVideoMetadata(videoId) {
+    try {
+      const docRef = doc(db, 'videos', videoId);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        return docSnap.data();
+      }
+      throw new Error('Video not found in Firestore');
+    } catch (error) {
+      console.error('Failed to fetch video metadata:', error);
+      throw error;
+    }
   }
 
   /**

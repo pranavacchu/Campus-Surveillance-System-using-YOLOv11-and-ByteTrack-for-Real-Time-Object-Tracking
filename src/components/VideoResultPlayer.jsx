@@ -9,7 +9,7 @@ const VideoResultPlayer = ({ result, index }) => {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !result.firebase_url) return;
+    if (!video || !result.cloudinary_url) return;
 
     const handleLoadedMetadata = () => {
       setIsLoading(false);
@@ -89,7 +89,7 @@ const VideoResultPlayer = ({ result, index }) => {
         </div>
       </div>
 
-      {result.firebase_url ? (
+      {result.cloudinary_url ? (
         <div className="video-container">
           {isLoading && (
             <div className="loading-overlay">
@@ -114,7 +114,7 @@ const VideoResultPlayer = ({ result, index }) => {
             preload="metadata"
             crossOrigin="anonymous"
           >
-            <source src={result.firebase_url} type="video/mp4" />
+            <source src={result.cloudinary_url} type="video/mp4" />
             Your browser does not support video playback.
           </video>
 
@@ -135,7 +135,7 @@ const VideoResultPlayer = ({ result, index }) => {
             <line x1="9" y1="9" x2="15" y2="15" />
           </svg>
           <p>Video URL not available</p>
-          <p className="hint">This video may not have been uploaded to Firebase Storage</p>
+          <p className="hint">This video may not have been uploaded to Cloudinary</p>
         </div>
       )}
 

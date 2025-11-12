@@ -59,7 +59,7 @@ const VideoProcessor = ({ isConnected }) => {
       
       console.log('📤 Starting cloud upload pipeline...');
       
-      // Use new cloud upload method with Firebase + Colab
+      // Use new cloud upload method with Firebase + Colab (with fallback)
       const uploadResult = await videoSearchService.uploadVideoWithCloud(
         file,
         (progressData) => {
@@ -71,6 +71,13 @@ const VideoProcessor = ({ isConnected }) => {
       setUploadedFile(uploadResult);
       setUploadProgress(100);
       setCloudUploadStatus('complete');
+      
+      // Show info if Cloudinary upload was skipped
+      if (!uploadResult.cloudinaryUrl) {
+        console.warn('⚠️ Video uploaded to Colab only (Cloudinary unavailable)');
+        console.log('💡 Search will work, but video playback unavailable');
+      }
+      
       console.log('✅ Upload complete:', uploadResult);
       
     } catch (err) {
@@ -94,15 +101,15 @@ const VideoProcessor = ({ isConnected }) => {
 
       console.log('🎬 Starting video processing...');
 
-      // Use new processing method with metadata
-      const { job_id } = await videoSearchService.processVideoWithMetadata(
-        uploadedFile.videoId,
+      // Process video with Cloudinary URL
+      const { job_id } = await videoSearchService.processVideo(
         uploadedFile.colabFilename,
         {
           videoName: videoName || uploadedFile.originalFilename,
           videoDate,
-          useObjectDetection,
-          firebaseUrl: uploadedFile.firebaseUrl
+          videoId: uploadedFile.videoId,
+          cloudinaryUrl: uploadedFile.cloudinaryUrl,
+          useObjectDetection
         }
       );
 

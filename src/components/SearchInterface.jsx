@@ -70,29 +70,10 @@ const SearchInterface = ({ isConnected }) => {
       
       setSearchResults(response.results || []);
       
-      // Enrich results with Firebase URLs from Firestore
-      console.log('📥 Enriching results with Firebase URLs...');
-      const enriched = await Promise.all(
-        (response.results || []).map(async (result) => {
-          // Try to get Firebase URL from Firestore if video_id exists
-          if (result.video_id) {
-            try {
-              const metadata = await videoSearchService.getVideoMetadata(result.video_id);
-              return { 
-                ...result, 
-                firebase_url: metadata.firebaseUrl || metadata.firebase_url 
-              };
-            } catch (err) {
-              console.warn('Failed to fetch metadata for', result.video_id, err);
-            }
-          }
-          // Keep result as-is if no video_id or fetch failed
-          return result;
-        })
-      );
-      
-      setEnrichedResults(enriched);
+      // Results already include cloudinary_url from Colab backend
+      // No need to enrich separately since Cloudinary URL is stored in Pinecone metadata
       console.log(`✅ Found ${response.count} results`);
+      setEnrichedResults(response.results || []);
       
     } catch (err) {
       setError(`Search failed: ${err.message}`);

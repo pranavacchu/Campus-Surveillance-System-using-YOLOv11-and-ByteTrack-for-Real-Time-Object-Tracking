@@ -7,16 +7,46 @@ const VideoResultPlayer = ({ result, index }) => {
   const [error, setError] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // Generate Cloudinary URL with start offset for instant loading at timestamp
+  const getVideoUrlWithTimestamp = (cloudinaryUrl, timestamp) => {
+    if (!cloudinaryUrl || !timestamp || timestamp < 0.5) {
+      // For timestamps < 0.5s, use original URL (no transformation needed)
+      return cloudinaryUrl;
+    }
+
+    // Parse Cloudinary URL to inject transformation
+    // Format: https://res.cloudinary.com/{cloud_name}/video/upload/{public_id}.mp4
+    // Target: https://res.cloudinary.com/{cloud_name}/video/upload/so_{seconds}/{public_id}.mp4
+    try {
+      const urlParts = cloudinaryUrl.split('/upload/');
+      if (urlParts.length === 2) {
+        // Round timestamp to nearest second for Cloudinary transformation
+        const startOffset = Math.floor(timestamp);
+        const transformedUrl = `${urlParts[0]}/upload/so_${startOffset}/${urlParts[1]}`;
+        console.log(`⏱️ Using Cloudinary start offset: ${startOffset}s`);
+        return transformedUrl;
+      }
+    } catch (e) {
+      console.warn('Failed to transform Cloudinary URL:', e);
+    }
+    
+    return cloudinaryUrl;
+  };
+
+  const videoUrl = getVideoUrlWithTimestamp(result.cloudinary_url, result.timestamp);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !result.cloudinary_url) return;
 
     const handleLoadedMetadata = () => {
       setIsLoading(false);
-      // Seek to timestamp
+      // For small timestamps (<0.5s), still do client-side seeking
       const timestamp = result.timestamp || 0;
-      video.currentTime = timestamp;
-      console.log(`⏱️ Video seeked to ${timestamp}s`);
+      if (timestamp > 0 && timestamp < 0.5) {
+        video.currentTime = timestamp;
+        console.log(`⏱️ Video seeked to ${timestamp}s (client-side)`);
+      }
     };
 
     const handleError = (e) => {
@@ -114,7 +144,7 @@ const VideoResultPlayer = ({ result, index }) => {
             preload="metadata"
             crossOrigin="anonymous"
           >
-            <source src={result.cloudinary_url} type="video/mp4" />
+            <source src={videoUrl} type="video/mp4" />
             Your browser does not support video playback.
           </video>
 
